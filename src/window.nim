@@ -1,8 +1,10 @@
 import util
 import raylib, raymath
+import std/[streams, typetraits]
+
 
 type
-  #WindowId* = distinct uint32
+  WindowId* = distinct uint32
   
   BaseWindowAction = enum
     None
@@ -10,7 +12,7 @@ type
     Resizing
 
   Window* = ref object of RootObj
-    rect*:        Rectangle
+    bounds*:      Rectangle
     dragOffset:   Vector2
     color*:       Color
     scale*:       float32
@@ -18,23 +20,25 @@ type
     beingDragged: bool
     beingScaled:  bool
 
-
+method write* (win: Window; stream: Stream) {.base.} = discard
+  
+method read*  (win: Window; stream: Stream) {.base.} = discard
 
 method update*(win: Window; cam: Camera2D) {.base.} =
   let
-    handleSize = 20'f32
     mousePos   = getScreenToWorld2D(getMousePosition(), cam)
+    handleSize = 20'f32
 
     topLeftHandle = rect(
-      x      = win.rect.x, 
-      y      = win.rect.y, 
+      x      = win.bounds.x, 
+      y      = win.bounds.y, 
       width  = handleSize, 
       height = handleSize
     )
     
     bottomRightHandle = rect(
-      x      = win.rect.x + (win.rect.width  - handleSize), 
-      y      = win.rect.y + (win.rect.height - handleSize), 
+      x      = win.bounds.x + (win.bounds.width  - handleSize), 
+      y      = win.bounds.y + (win.bounds.height - handleSize), 
       width  = handleSize, 
       height = handleSize
     )
@@ -42,27 +46,27 @@ method update*(win: Window; cam: Camera2D) {.base.} =
   if isMouseButtonPressed Left:
     if checkCollisionPointRec(mousePos, topLeftHandle):
       win.action     = Dragging
-      win.dragOffset = mousePos - vec2(win.rect.x, win.rect.y)
+      win.dragOffset = mousePos - vec2(win.bounds.x, win.bounds.y)
     elif checkCollisionPointRec(mousePos, bottomRightHandle):
       win.action     = Resizing
-      win.dragOffset = vec2(win.rect.width  / win.scale,
-                            win.rect.height / win.scale)
+      win.dragOffset = vec2(win.bounds.width  / win.scale,
+                            win.bounds.height / win.scale)
 
   case win.action
   of Dragging:
-    win.rect.x = mousePos.x - win.dragOffset.x
-    win.rect.y = mousePos.y - win.dragOffset.y
+    win.bounds.x = mousePos.x - win.dragOffset.x
+    win.bounds.y = mousePos.y - win.dragOffset.y
     
   of Resizing:
     let 
-      targetW = max(40.0, mousePos.x - win.rect.x)
-      targetH = max(40.0, mousePos.y - win.rect.y)
+      targetW = max(40.0, mousePos.x - win.bounds.x)
+      targetH = max(40.0, mousePos.y - win.bounds.y)
       scaleX  = targetW / win.dragOffset.x
       scaleY  = targetH / win.dragOffset.y
     # no asp rat
-    win.scale       = (scaleX + scaleY) / 2.0  # just an avg
-    win.rect.width  = targetW
-    win.rect.height = targetH
+    win.scale         = (scaleX + scaleY) / 2.0  # just an avg
+    win.bounds.width  = targetW
+    win.bounds.height = targetH
 
   of None:
     discard
@@ -72,5 +76,5 @@ method update*(win: Window; cam: Camera2D) {.base.} =
 
       
 method draw*(win: Window) {.base.} =
-  drawRectangle(win.rect, win.color)
+  drawRectangle(win.bounds, win.color)
   
