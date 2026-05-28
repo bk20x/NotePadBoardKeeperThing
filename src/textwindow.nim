@@ -87,7 +87,7 @@ proc drawTextWrapped*(font: Font;
           if ch != ' ' and ch != '\t':
             drawTextCodepoint(font,
                               Rune(ord(ch)),
-                              Vector2(x: rec.x + textOffsetX, y: rec.y + textOffsetY),
+                              vec2(rec.x + textOffsetX, rec.y + textOffsetY),
                               fontSize,
                               tint)
 

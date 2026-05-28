@@ -4,7 +4,7 @@ import window, textwindow
 import desktop
 import streams
 
-
+from std/os import fileExists
 
 proc main =
   const
@@ -13,12 +13,13 @@ proc main =
     
   var desktop: Desktop
   block loadingDesktop:
-    var stream = openFileStream("dat.ddt")
-    defer: close(stream)
-    if stream == nil or stream.atEnd:
-      desktop = createDesktopWithWindows()
-    else:
+    const DefaultDesktopFileName = "dat.ddt"
+    if fileExists(DefaultDesktopFileName):
+      var stream = openFileStream(DefaultDesktopFileName)
+      defer: close(stream)
       desktop = readDesktop(stream)
+    else:
+      desktop = createDesktopWithWindows()
 
       
   setConfigFlags(flags(WindowResizable))
