@@ -1,6 +1,5 @@
 import window
 import util
-from std/unicode import Rune
 import std/[streams, typetraits]
 import raylib
 
@@ -24,130 +23,184 @@ func newTextWindow* (bounds = rect(width=32, height=32);
     textSelected: false
   )
 
+  
+from std/unicode  import Rune
+from std/strutils import splitLines
+proc drawTextWrapped*(font: Font;
+                      text: string;
+                      rec:  Rectangle;
+                      fontSize, spacing: float32;
+                      tint: Color) =
+  if text.len == 0: return
 
-proc drawTextWrapped(font: Font;
-                     text: string;
-                     rec:  Rectangle;
-                     fontSize, spacing: float32;
-                     tint: Color) =
-  type
-    WrapState = enum
-      Draw,
-      Measure
-  let length = text.len
-  if length == 0: return
-
-  var 
-    state       = Measure
-    endLine     = -1
-    startLine   = -1
+  let 
     scaleFactor = fontSize / font.baseSize.float32
-    textOffsetX = 0.0'f32
-    textOffsetY = 0.0'f32
-    i = 0
+    lineHeight  = (font.baseSize.float32 + font.baseSize.float32 / 2.0'f32) * scaleFactor
 
-  while i < length:
-    let
-      ch        = text[i]
-      codepoint = ord(ch) 
-    
+  var textOffsetY = 0.0'f32
 
-    let idx = getGlyphIndex(font, Rune(codepoint))
-    var glyphWidth = 0.0'f32
-    if codepoint != 10: 
-      if font.glyphs[idx].advanceX == 0:
-        glyphWidth = font.recs[idx].width * scaleFactor 
-      else:
-        glyphWidth = font.glyphs[idx].advanceX.float32 * scaleFactor
-      if i + 1 < length: glyphWidth += spacing
+  for line in text.splitLines():    
+    if line.len == 0:
+      textOffsetY += lineHeight
+      continue
 
-    case state
-    of Measure:
-      if codepoint == 32 or codepoint == 9 or codepoint == 10: 
-        endLine = i
+    var 
+      i = 0
+      lineLength = line.len
 
-      if (textOffsetX + glyphWidth) > rec.width:
-        endLine = if endLine < 1: i else: endLine
-        if i == endLine: endLine -= 1
-        if (startLine + 1) == endLine: endLine = i - 1
-        state = Draw
-      elif (i + 1) >= length:
-        endLine = i
-        state = Draw
-      elif codepoint == 10: 
-        state = Draw
+    while i < lineLength:
+      var 
+        spaceIndex = -1
+        textWidth  = 0.0'f32
+        endIndex   = i
 
-      if state == Draw:
-        textOffsetX = 0.0'f32
-        i = startLine
-        glyphWidth = 0.0'f32
+      while endIndex < lineLength:
+        let 
+          ch = line[endIndex]
+          codepoint = ord(ch)
 
-    of Draw:
-      if codepoint != 10 and (textOffsetY + font.baseSize.float32 * scaleFactor) <= rec.height:
-        if codepoint != 32 and codepoint != 9:
-          drawTextCodepoint(font,
-                            Rune(codepoint),
-                            Vector2(x: rec.x + textOffsetX, y: rec.y + textOffsetY),
-                            fontSize,
-                            tint)
+        if codepoint in {32, 9}:
+          spaceIndex = endIndex
 
-      if i == endLine:
-        textOffsetX = 0.0'f32
-        textOffsetY += (font.baseSize.float32 + font.baseSize.float32/2.0'f32) * scaleFactor
-        startLine = endLine
-        endLine   = -1
-        glyphWidth = 0.0'f32
-        state = Measure
+        let idx = getGlyphIndex(font, Rune(codepoint))
+        var glyphWidth = if font.glyphs[idx].advanceX == 0:
+                           font.recs[idx].width * scaleFactor 
+                         else:
+                           font.glyphs[idx].advanceX.float32 * scaleFactor
+        if endIndex + 1 < lineLength: glyphWidth += spacing
 
-    textOffsetX += glyphWidth
-    i += 1
+        if textWidth + glyphWidth > rec.width:
+          if spaceIndex > i:
+            endIndex = spaceIndex + 1
+          else:
+            if endIndex == i: endIndex += 1 
+          break
 
+        textWidth += glyphWidth
+        endIndex += 1
+
+      var textOffsetX = 0.0'f32
+      if textOffsetY + lineHeight <= rec.height:
+        for renderIndex in i ..< endIndex:
+          let ch = line[renderIndex]
+          
+          if ch != ' ' and ch != '\t':
+            drawTextCodepoint(font,
+                              Rune(ord(ch)),
+                              Vector2(x: rec.x + textOffsetX, y: rec.y + textOffsetY),
+                              fontSize,
+                              tint)
+
+          let idx = getGlyphIndex(font, Rune(ord(ch)))
+          var glyphWidth = if font.glyphs[idx].advanceX == 0:
+                             font.recs[idx].width * scaleFactor 
+                           else:
+                             font.glyphs[idx].advanceX.float32 * scaleFactor
+          if renderIndex + 1 < lineLength: glyphWidth += spacing
+          textOffsetX += glyphWidth
+          
+      # next slot
+      textOffsetY += lineHeight
+      i = endIndex
 
 method update* (win: TextWindow; cam: Camera2D) =
   const Border = 10
   procCall Window(win).update(cam)
-  let mousePos = getScreenToWorld2D(getMousePosition(), cam)
+  
   if isMouseButtonPressed(Left):
+    let mousePos = getScreenToWorld2D(getMousePosition(), cam)
     win.textSelected = mousePos in win.textArea
+    
   if win.textSelected:
-    if isKeyPressed(Backspace):
-      if win.text.len > 0:
-        win.text.setLen(win.text.high)
-        
-    let ch = getCharPressed()
-    if ch in 32..125:
-      win.text.add chr(ch)
+    var key = getKeyPressed()
+    while key != Null:
+      case key
+      of Backspace: 
+        if win.text.len > 0: win.text.setLen(win.text.high)
+      of Enter, KP_Enter: 
+        win.text.add "\n"
+      of Space: 
+        win.text.add " "
+      of Tab: 
+        win.text.add "    "
+      else:
+        let keycode = int(key)
+        if keycode in 32..126:
+          var c = chr(keycode)
+          if isKeyDown(LeftShift) or isKeyDown(RightShift):
+            const syms = [('1','!'), ('6','^'), ('-','_'),  (';',':'),
+                          ('2','@'), ('7','&'), ('=','+'),  ('\'','"'),
+                          ('3','#'), ('8','*'), ('[','{'),  (',','<'),
+                          ('4','$'), ('9','('), (']','}'),  ('.','>'),
+                          ('5','%'), ('0',')'), ('\\','|'), ('/','?')]
+            for pair in syms:
+              if c == pair[0]: c = pair[1]; break
+          elif c >= 'A' and c <= 'Z':
+            c = chr(ord(c) + 32) # downcasing
+          win.text.add c
+      key = getKeyPressed()
+      
+  win.textArea = rect(win.bounds.x + Border/2,
+                      win.bounds.y + Border/2,
+                      win.bounds.width  - Border,
+                      win.bounds.height - Border)
 
-  win.textArea = rect(
-    x      = win.bounds.x + Border/2,
-    y      = win.bounds.y + Border/2,
-    width  = win.bounds.width  - Border,
-    height = win.bounds.height - Border
-  )
+
+proc measureEditorTextWidth(font: Font, text: string, fontSize: float32, spacing: float32): float32 =
+  var 
+    maxWidth = 0.0'f32
+    currentLine = ""
+  
+  for i in 0 ..< text.len:
+    if text[i] == '\n':
+      let w = measureText(font, currentLine, fontSize, spacing).x
+      if w > maxWidth: maxWidth = w
+      currentLine = ""
+    else:
+      currentLine.add(text[i])
+      
+  let w = measureText(font, currentLine, fontSize, spacing).x
+  if w > maxWidth: maxWidth = w
+  return maxWidth
 
 
+var p: pointer = nil
+var f: Font
+addQuitProc(proc {.noconv.} =
+              echo "deallocing little poop for temp i should revamp this later"
+              dealloc(p)) # lol
 
-var f: ptr Font = nil
 
 method draw* (win: TextWindow) =
-  if f == nil:
-    f = cast[ptr Font](alloc sizeof(Font))
-    f[] = loadFont("/home/bk20x/.local/share/fonts/NotoMono-Regular.ttf")
-    
+  if p == nil:
+    f = loadFont("/home/bk20x/.local/share/fonts/NotoMono-Regular.ttf")
+    p = alloc(1)
+  
   procCall Window(win).draw()
-  drawRectangleLines(win.textArea, 1'f32 * win.scale, Red) # dbg
-  let fontScale: float32 = 16*win.scale
-    
+
+  let
+    baseFontSize = 16.0'f32 * win.scale
+    spacing      = 1.0'f32
+    maxLineWidth = measureEditorTextWidth(f, win.text, baseFontSize, spacing)
+
+  var fontScale = if maxLineWidth > win.textArea.width:
+                    (win.textArea.width / maxLineWidth) * baseFontSize
+                  else:
+                    baseFontSize
+
+  let maxFontSize = 32.0'f32 * win.scale
+  if fontScale > maxFontSize:
+    fontScale = maxFontSize
+      
   if win.textSelected:
     drawRectangle(win.textArea, SkyBlue)
-    
 
   drawTextWrapped(
-    f[],
+    f,
     win.text,
     win.textArea,
     fontScale,
-    1.0'f32,
+    spacing,
     Black
   )
 
@@ -155,12 +208,7 @@ method draw* (win: TextWindow) =
 
 
 method write* (win: TextWindow; stream: Stream) =
-  let
-    tyname    = win.type.name
-    tynameLen = tyname.len
-  stream.write(tynameLen)
-  stream.writeData(addr tyname[0], tynameLen)
-    
+  win.writeTypeName(stream)
   stream.writeData(addr win.bounds,   sizeof(Rectangle))
   stream.writeData(addr win.textArea, sizeof(Rectangle))
   stream.writeData(addr win.color,    sizeof(Color))

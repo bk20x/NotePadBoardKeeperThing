@@ -21,8 +21,15 @@ type
     beingScaled:  bool
 
 method write* (win: Window; stream: Stream) {.base.} = discard
-  
 method read*  (win: Window; stream: Stream) {.base.} = discard
+
+template writeTypeName*(win: Window; stream: Stream): untyped =
+  let
+    tyname    = win.type.name
+    tynameLen = tyname.len
+  stream.write(tynameLen)
+  stream.writeData(addr tyname[0], tynameLen)
+    
 
 method update*(win: Window; cam: Camera2D) {.base.} =
   let

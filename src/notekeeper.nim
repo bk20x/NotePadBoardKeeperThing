@@ -2,26 +2,25 @@ import raylib
 import util
 import window, textwindow
 import desktop
-import streams, os
-import std/typetraits
+import streams
 
 
-proc main() =
+
+proc main =
   const
     GameW = 800'f32
     GameH = 600'f32
+    
   var desktop: Desktop
   block loadingDesktop:
-    var stream  = openFileStream("dat.ddt")
+    var stream = openFileStream("dat.ddt")
     defer: close(stream)
     if stream == nil or stream.atEnd:
       desktop = createDesktopWithWindows()
     else:
       desktop = readDesktop(stream)
 
-    
-  
-        
+      
   setConfigFlags(flags(WindowResizable))
   initWindow(GameW.int32, GameH.int32, "Notes")
   defer: closeWindow()
@@ -29,17 +28,17 @@ proc main() =
   
   var cam = Camera2D(zoom: 1.0)
   while not windowShouldClose():
+
     let
       scaleX = getRenderWidth().float32  / GameW
       scaleY = getRenderHeight().float32 / GameH
     
     cam.zoom = min(scaleX, scaleY)
     if isMouseButtonPressed Right:
-      let p = getScreenToWorld2D(getMousePosition(), cam)
-      desktop.windows.add:
-        newTextWindow(bounds=rect(p.x, p.y, 256, 256))
+      let mousePos = getScreenToWorld2D(getMousePosition(), cam)
+      desktop.windows.add newTextWindow(bounds=rect(mousePos.x, mousePos.y, 256, 256))
       
-    if isKeyPressed(F2):
+    if isKeyPressed F2:
       block savingDesktop:
         var stream = openFileStream("dat.ddt", fmReadWrite)
         defer: close(stream)
@@ -48,10 +47,9 @@ proc main() =
 
     if isKeyDown LeftControl:
       let mousePos = getScreenToWorld2D(getMousePosition(), cam)
-      for i in countdown(high(desktop.windows), 0):
+      for i in countdown(desktop.windows.high, 0):
         if mousePos in desktop.windows[i].bounds and isMouseButtonPressed Right:
           desktop.windows.del(i)
-        
       
     for w in desktop.windows:
       w.update(cam)
