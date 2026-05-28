@@ -26,21 +26,34 @@ func newTextWindow* (bounds = rect(width=32, height=32);
   
 from std/unicode  import Rune
 from std/strutils import splitLines
-proc drawTextWrapped*(font: Font;
-                      text: string;
-                      rec:  Rectangle;
+proc drawTextWrapped*(win: TextWindow;
+                      font: Font;
                       fontSize, spacing: float32;
                       tint: Color) =
-  if text.len == 0: return
+  if win.text.len == 0: return
 
   let 
     scaleFactor = fontSize / font.baseSize.float32
     lineHeight  = (font.baseSize.float32 + font.baseSize.float32 / 2.0'f32) * scaleFactor
+    textLines   = win.text.splitLines()
+    totalLines  = textLines.len
 
   var textOffsetY = 0.0'f32
 
-  for line in text.splitLines():    
+  for lineIdx, line in textLines:    
+    let isLastLine = lineIdx == totalLines - 1
+
     if line.len == 0:
+      if win.textSelected and isLastLine and (textOffsetY + lineHeight <= win.textArea.height):
+        let cursorWidth = 2.0'f32 * scaleFactor
+        drawRectangleLines(
+          rect(x = win.textArea.x + 2.0'f32,
+               y = win.textArea.y + textOffsetY,
+               width  = cursorWidth,
+               height = lineHeight), 
+          1.0'f32, 
+          Black
+        )
       textOffsetY += lineHeight
       continue
 
@@ -69,7 +82,7 @@ proc drawTextWrapped*(font: Font;
                            font.glyphs[idx].advanceX.float32 * scaleFactor
         if endIndex + 1 < lineLength: glyphWidth += spacing
 
-        if textWidth + glyphWidth > rec.width:
+        if textWidth + glyphWidth > win.textArea.width:
           if spaceIndex > i:
             endIndex = spaceIndex + 1
           else:
@@ -80,14 +93,14 @@ proc drawTextWrapped*(font: Font;
         endIndex += 1
 
       var textOffsetX = 0.0'f32
-      if textOffsetY + lineHeight <= rec.height:
+      if textOffsetY + lineHeight <= win.textArea.height:
         for renderIndex in i ..< endIndex:
           let ch = line[renderIndex]
           
           if ch != ' ' and ch != '\t':
             drawTextCodepoint(font,
                               Rune(ord(ch)),
-                              vec2(rec.x + textOffsetX, rec.y + textOffsetY),
+                              vec2(win.textArea.x + textOffsetX, win.textArea.y + textOffsetY),
                               fontSize,
                               tint)
 
@@ -98,8 +111,20 @@ proc drawTextWrapped*(font: Font;
                              font.glyphs[idx].advanceX.float32 * scaleFactor
           if renderIndex + 1 < lineLength: glyphWidth += spacing
           textOffsetX += glyphWidth
-          
-      # next slot
+
+        if win.textSelected and isLastLine and endIndex >= lineLength:
+          let cursorWidth = 2.0'f32 * scaleFactor
+          drawRectangleLines(
+            rect(
+              x = win.textArea.x + textOffsetX + 2.0'f32, 
+              y = win.textArea.y + textOffsetY, 
+              width = cursorWidth, 
+              height = lineHeight
+            ), 
+            1.0'f32, 
+            Black
+          )
+
       textOffsetY += lineHeight
       i = endIndex
 
@@ -195,10 +220,8 @@ method draw* (win: TextWindow) =
   if win.textSelected:
     drawRectangle(win.textArea, SkyBlue)
 
-  drawTextWrapped(
+  win.drawTextWrapped(
     f,
-    win.text,
-    win.textArea,
     fontScale,
     spacing,
     Black
