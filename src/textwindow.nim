@@ -41,16 +41,16 @@ proc drawTextWrapped*(win:      TextWindow;
                       fontSize: float32;
                       spacing:  float32;
                       tint:     Color) =
-  win.charPositions = newSeq[tuple[x: float32, y: float32, height: float32]](win.text.len + 1)
   let
     textLines   = win.text.splitLines()
     scaleFactor = fontSize / font.baseSize.float32
     lineHeight  = (font.baseSize.float32 + font.baseSize.float32 / 2.0'f32) * scaleFactor
-
+    
   if win.text.len == 0: 
     win.charPositions = @[(x: win.textArea.x + 2.0'f32, y: win.textArea.y, height: lineHeight)]
     return
-
+    
+  win.charPositions = newSeq[EditorPos](win.text.len + 1)
   var 
     textOffsetY = 0.0'f32
     globalCharIdx = 0
