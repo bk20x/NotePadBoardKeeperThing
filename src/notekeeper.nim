@@ -1,11 +1,10 @@
-import raylib
+import raylib, raygui
 import util
 import window, textwindow
 import desktop
-import streams
+import std/[os, streams, strformat]
 
-from std/os import fileExists
-
+const DefaultDesktopFileName = "dat.ddt"
 proc main =
   const
     GameW = 800'f32
@@ -13,13 +12,13 @@ proc main =
     
   var desktop: Desktop
   block loadingDesktop:
-    const DefaultDesktopFileName = "dat.ddt"
-    if fileExists(DefaultDesktopFileName):
+    if fileExists DefaultDesktopFileName:
       var stream = openFileStream(DefaultDesktopFileName)
       defer: close(stream)
       desktop = readDesktop(stream)
     else:
       desktop = createDesktopWithWindows()
+
 
       
   setConfigFlags(flags(WindowResizable))
@@ -28,29 +27,39 @@ proc main =
   setTargetFPS(60)
   
   var cam = Camera2D(zoom: 1.0)
-  while not windowShouldClose():
-
-    let
-      scaleX = getRenderWidth().float32  / GameW
-      scaleY = getRenderHeight().float32 / GameH
     
-    cam.zoom = min(scaleX, scaleY)
-    if isMouseButtonPressed Right:
-      let mousePos = getScreenToWorld2D(getMousePosition(), cam)
-      desktop.windows.add newTextWindow(bounds=rect(mousePos.x, mousePos.y, 256, 256))
+  
+  while not windowShouldClose():
+    let
+      screenW = getRenderWidth()
+      screenH = getRenderHeight()
+      scaleX  = screenW.float32  / GameW
+      scaleY  = screenH.float32 / GameH
       
-    if isKeyPressed F2:
-      block savingDesktop:
-        var stream = openFileStream("dat.ddt", fmReadWrite)
+    block updateCamera:
+      cam.zoom = min(scaleX, scaleY)
+        
+    block savingDesktop:
+      if isKeyPressed F2:
+        var stream = openFileStream(DefaultDesktopFileName, fmReadWrite)
         defer: close(stream)
-        desktop.write(stream)
+        if not fileExists(DefaultDesktopFileName): #first time saving or in a new location, otherwise was doing some really weird shit, where no file was visible in the directory, but was loadable
+          writeFile(DefaultDesktopFileName, "")
+          desktop.write(stream)
+        else:
+          desktop.write(stream)
 
-
-    if isKeyDown LeftControl:
-      let mousePos = getScreenToWorld2D(getMousePosition(), cam)
-      for i in countdown(desktop.windows.high, 0):
-        if mousePos in desktop.windows[i].bounds and isMouseButtonPressed Right:
-          desktop.windows.del(i)
+          
+    block standardInput:
+      if isMouseButtonPressed Right:
+        let mousePos = getScreenToWorld2D(getMousePosition(), cam)
+        desktop.windows.add newTextWindow(bounds = rect(mousePos.x, mousePos.y, 256, 256))
+    
+      if isKeyDown LeftControl:
+        let mousePos = getScreenToWorld2D(getMousePosition(), cam)
+        for i in countdown(desktop.windows.high, 0):
+          if mousePos in desktop.windows[i].bounds and isMouseButtonPressed Right:
+            desktop.windows.del(i)
       
     for w in desktop.windows:
       w.update(cam)
